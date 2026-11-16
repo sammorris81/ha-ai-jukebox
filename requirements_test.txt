@@ -1,0 +1,7 @@
+# Tested against Home Assistant 2026.10.4. The ai_task dependency pulls in
+# conversation and camera, whose requirements are listed after the harness.
+pytest-homeassistant-custom-component==0.13.375
+gazetteer-matcher==1.1.0
+hassil==3.12.1
+home-assistant-intents==2026.10.6
+PyTurboJPEG==1.8.3

@@ -1,0 +1,238 @@
+start:
+  name: Start
+  description: Start (or restart) an AI-generated playlist session on one or more speakers. Always clears any existing queue on those speakers first.
+  target:
+    entity:
+      domain: media_player
+      integration: ai_jukebox
+  fields:
+    group_members:
+      name: Speakers
+      description: Media player entities to attach and play on.
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+    batch_size:
+      name: Batch Size
+      description: Tracks to request per generation call. Overrides the playlist's configured batch size for this session. There is no session-length limit — the playlist refills indefinitely until stopped.
+      required: false
+      selector:
+        number:
+          min: 3
+          max: 50
+stop:
+  name: Stop
+  description: Stop a playlist session. Saves the remaining unplayed tracks under the playlist (not the speaker). Omit "group_members" to stop entirely.
+  target:
+    entity:
+      domain: media_player
+      integration: ai_jukebox
+  fields:
+    group_members:
+      name: Speakers
+      description: Optional — stop just these speakers (equivalent to detach_speaker) instead of the whole session.
+      required: false
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+
+attach_speaker:
+  name: Attach Speaker
+  description: Add one or more speakers to a running playlist session. Equivalent to the standard media_player.join service targeting this entity (e.g. from a dashboard card's own group UI).
+  target:
+    entity:
+      domain: media_player
+      integration: ai_jukebox
+  fields:
+    group_members:
+      name: Speakers
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+
+detach_speaker:
+  name: Detach Speaker
+  description: Remove one or more speakers from a running playlist session. Detaching the last speaker stops the session. Note media_player.unjoin targeting this entity stops the whole session instead (ai_jukebox is the group's anchor, not a member) — use this service to remove just one speaker.
+  target:
+    entity:
+      domain: media_player
+      integration: ai_jukebox
+  fields:
+    group_members:
+      name: Speakers
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+
+reset:
+  name: Reset
+  description: Force a stuck playlist session back to a clean idle state without restarting Home Assistant. Does not touch playlist history/cache.
+  target:
+    entity:
+      domain: media_player
+      integration: ai_jukebox
+
+save_playlist:
+  name: Save Playlist
+  description: Create or update a playlist definition.
+  fields:
+    name:
+      name: Name
+      required: true
+      selector:
+        text:
+    prompt:
+      name: Prompt
+      description: >-
+        A description of what this playlist should sound like -- and nothing
+        else. Rules belong in the fields below: genres in Genres/Exclude
+        genres, artists in Artists/Exclude artists. Judgements a list cannot
+        hold ("a jazz standard sung straight is welcome, a bebop
+        vocal-as-instrument performance is not") do belong here.
+      required: true
+      selector:
+        text:
+          multiline: true
+    batch_size:
+      name: Batch Size
+      description: >-
+        How many tracks are drawn from the pool and enqueued per refill, and for
+        the cold-start top-up at session start. No model call is involved --
+        refills sample the existing pool, so this is a queue-depth setting, not
+        a generation setting. A refill fires when the queue falls to Refill
+        threshold.
+      default: 10
+      selector:
+        number:
+          min: 3
+          max: 50
+    refill_threshold:
+      name: Refill Threshold
+      description: Refill when fewer than N tracks remain in the queue.
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 20
+    tags:
+      name: Tags
+      required: false
+      selector:
+        object:
+    artists:
+      name: Artists
+      description: >-
+        Seed artists -- the durable curation surface, kept separate from the
+        prompt so the two can be edited independently. They reach the model as
+        structured data: roster.py names them in its own instruction and asks
+        for them back plus new artists alongside them.
+        Note they reach the ROSTER stage only -- the album and track calls do
+        not see seed names, so "pick tracks worthy of these artists" cannot be
+        expressed yet. There is no placeholder to interpolate; a literal
+        "{artists}" in a prompt would now be sent to the model verbatim.
+      required: false
+      selector:
+        object:
+    exclude_artists:
+      name: Exclude artists
+      description: >-
+        Artists that must never appear. Stated to the model at every build
+        stage, and enforced after the roster returns -- so an excluded artist
+        cannot come back as a discovery. Artist identity resolves to a real id,
+        which is why this one gets a hard check.
+      required: false
+      selector:
+        object:
+    genres:
+      name: Genres
+      description: >-
+        Optional allow-list of genres to stay within. Advice to the model, not
+        a metadata filter: Music Assistant's genre tags are as unreliable as
+        its reissue years, which is why hard year filtering was rejected.
+      required: false
+      selector:
+        object:
+    exclude_genres:
+      name: Exclude genres
+      description: >-
+        Genres that must never appear -- holiday music, and whatever else this
+        playlist should not drift into. Advice to the model, for the same
+        reason as Genres.
+      required: false
+      selector:
+        object:
+    generate:
+      name: Generate now
+      description: >-
+        Also rebuild this playlist's pool immediately. Saving alone never
+        rebuilds, so editing a prompt does not cost a full build.
+      required: false
+      example: true
+      selector:
+        boolean:
+
+rebuild_pool:
+  target:
+    entity:
+      integration: ai_jukebox
+      domain: media_player
+  fields:
+    force:
+      name: Force
+      description: >-
+        Run outside the 02:00-05:00 window. Rebuilds are long and replace the
+        pool, so they are normally confined to the overnight window.
+      required: false
+      example: true
+      selector:
+        boolean:
+    resume:
+      name: Resume
+      description: >-
+        Continue a build that died mid-flight instead of replacing the pool.
+        Keeps the tracks already collected and skips artists already present.
+      required: false
+      example: true
+      selector:
+        boolean:
+
+delete_playlist:
+  name: Delete Playlist
+  description: Delete a playlist, along with its media player and device. Refuses if its session is currently active. Deleting it from the integration page instead does not check, so stop it first.
+  fields:
+    name:
+      name: Name
+      required: true
+      selector:
+        text:
+
+list_playlists:
+  name: List Playlists
+  description: Returns all configured playlists with metadata. Optionally filter by tag(s).
+  fields:
+    tag:
+      name: Tag
+      required: false
+      selector:
+        text:
+    tags:
+      name: Tags
+      description: Filter to playlists matching ALL specified tags.
+      required: false
+      selector:
+        object:
+
+clear_history:
+  name: Clear Playlist History
+  description: Reset track dedup history for a playlist. Preserves the unplayed queue.
+  target:
+    entity:
+      domain: media_player
+      integration: ai_jukebox

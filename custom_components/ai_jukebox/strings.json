@@ -1,0 +1,116 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AI Jukebox",
+        "description": "Choose the AI Task entities the pool builder uses. They are tried in order, moving on to the next when one fails, so put the entities with the largest daily request allowance first.",
+        "data": {
+          "build_ai_entities": "AI Task entities"
+        }
+      }
+    },
+    "error": {
+      "no_ai_entity": "Choose at least one AI Task entity."
+    },
+    "abort": {
+      "already_configured": "AI Jukebox is already set up. Add playlists from its page."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AI Jukebox settings",
+        "data": {
+          "build_ai_entities": "AI Task entities",
+          "managed_speakers": "Speakers that may join automatically",
+          "auto_rebuild": "Rebuild pools overnight",
+          "rebuild_start_hour": "Rebuild window starts",
+          "rebuild_end_hour": "Rebuild window ends"
+        },
+        "data_description": {
+          "build_ai_entities": "Tried in order, moving on when one fails. Put the entities with the largest daily request allowance first.",
+          "managed_speakers": "When one of these is grouped with a playing jukebox speaker from outside the jukebox (the Sonos app, or Music Assistant), it joins the session. Other speakers are ignored.",
+          "auto_rebuild": "Refresh one playlist's pool per hour inside the window, least recently built first, and resume builds that were cut off by a restart.",
+          "rebuild_start_hour": "Local hour, 0-23. The rebuild_pool action also refuses to run outside the window unless forced.",
+          "rebuild_end_hour": "Local hour, 0-23, exclusive. May be earlier than the start to wrap past midnight."
+        }
+      }
+    },
+    "error": {
+      "no_ai_entity": "Choose at least one AI Task entity."
+    }
+  },
+  "config_subentries": {
+    "playlist": {
+      "initiate_flow": {
+        "user": "Add playlist",
+        "reconfigure": "Edit playlist"
+      },
+      "entry_type": "Playlist",
+      "step": {
+        "user": {
+          "title": "Add playlist",
+          "data": {
+            "name": "Name",
+            "prompt": "Description",
+            "artists": "Seed artists",
+            "exclude_artists": "Never include these artists",
+            "genres": "Stay within these genres",
+            "exclude_genres": "Never include these genres",
+            "tags": "Tags",
+            "exclude_live": "Leave out live recordings",
+            "exclude_remix": "Leave out remixes",
+            "batch_size": "Tracks per refill",
+            "refill_threshold": "Refill when this many tracks remain",
+            "build_now": "Build the track pool now"
+          },
+          "data_description": {
+            "name": "Set once. It names the media player and its files, so it can't be changed later.",
+            "prompt": "What the playlist should sound like, and nothing else. Lists of artists and genres go in the fields below; judgements a list can't hold belong here.",
+            "artists": "The artists that define the playlist. The model finds around 55 more that belong alongside them, and these get extra weight in what plays.",
+            "exclude_artists": "Artists the model must never pick.",
+            "genres": "Optional. Leave empty to let the description decide.",
+            "exclude_genres": "Genres the model must never pick.",
+            "tags": "Free-form labels, used by the list_playlists action. A playlist tagged 'test' is left out of the nightly rebuild.",
+            "batch_size": "Tracks drawn from the pool and queued each time the queue runs low. No model call is involved.",
+            "build_now": "A build makes around 30 model requests and takes a few minutes. Saving without building changes nothing until the next rebuild."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit {name}",
+          "data": {
+            "prompt": "Description",
+            "artists": "Seed artists",
+            "exclude_artists": "Never include these artists",
+            "genres": "Stay within these genres",
+            "exclude_genres": "Never include these genres",
+            "tags": "Tags",
+            "exclude_live": "Leave out live recordings",
+            "exclude_remix": "Leave out remixes",
+            "batch_size": "Tracks per refill",
+            "refill_threshold": "Refill when this many tracks remain",
+            "build_now": "Build the track pool now"
+          },
+          "data_description": {
+            "prompt": "What the playlist should sound like, and nothing else. Lists of artists and genres go in the fields below; judgements a list can't hold belong here.",
+            "artists": "The artists that define the playlist. The model finds around 55 more that belong alongside them, and these get extra weight in what plays.",
+            "exclude_artists": "Artists the model must never pick.",
+            "genres": "Optional. Leave empty to let the description decide.",
+            "exclude_genres": "Genres the model must never pick.",
+            "tags": "Free-form labels, used by the list_playlists action. A playlist tagged 'test' is left out of the nightly rebuild.",
+            "batch_size": "Tracks drawn from the pool and queued each time the queue runs low. No model call is involved.",
+            "build_now": "A build makes around 30 model requests and takes a few minutes. Saving without building changes nothing until the next rebuild."
+          }
+        }
+      },
+      "error": {
+        "name_required": "Give the playlist a name.",
+        "name_taken": "A playlist with this name (or one that differs only in punctuation or case) already exists.",
+        "prompt_required": "Describe what the playlist should sound like."
+      },
+      "abort": {
+        "reconfigure_successful": "Playlist saved."
+      }
+    }
+  }
+}
