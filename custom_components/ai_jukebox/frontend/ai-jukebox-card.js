@@ -408,13 +408,14 @@ AiJukeboxCard.styles = `
  * AI Jukebox player card -- the now playing view of a running session.
  *
  *   type: custom:ai-jukebox-player-card
- *   entity: media_player.ai_jukebox_x   # optional; omit to show every active session
+ *   entity: media_player.ai_jukebox_x   # optional; omit to follow every active session
  *
- * Artwork, track, progress, transport and group volume for the playlist, and a
- * speaker list for adding speakers to or taking them out of the session. The
- * list offers the managed speakers from the Configure page, in that order,
+ * Artwork, track, progress, transport and group volume for the playlist, then
+ * the speakers in the session with their own volume. The speaker button opens
+ * a join list: the managed speakers from the Configure page, in that order,
  * plus any speaker already in the session that isn't on it, so it can always
- * be taken back out.
+ * be taken back out. Without `entity`, several active sessions are shown one
+ * at a time with arrows, dots and swipe to move between them.
  */
 
 const PLAYER_ICONS = {
@@ -423,6 +424,8 @@ const PLAYER_ICONS = {
   play: ICONS.play,
   pause: "M14,19H18V5H14M6,19H10V5H6V19Z",
   stop: ICONS.stop,
+  left: "M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z",
+  right: "M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z",
   speakers:
     "M18,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V4A2,2 0 0,0 18,2M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4M12,20A5,5 0 0,1 7,15A5,5 0 0,1 12,10A5,5 0 0,1 17,15A5,5 0 0,1 12,20M12,12A3,3 0 0,0 9,15A3,3 0 0,0 12,18A3,3 0 0,0 15,15A3,3 0 0,0 12,12Z",
   volume: "M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z",
@@ -450,6 +453,7 @@ class AiJukeboxPlayerCard extends HTMLElement {
     this._signature = "";
     this._pending = new Set();
     this._open = new Set();
+    this._current = null; // carousel: entity_id of the session on screen
     // Where a speaker switch was flipped to, held until the call returns, so
     // it doesn't snap back while the speaker takes seconds to join.
     this._want = new Map();
@@ -467,7 +471,6 @@ class AiJukeboxPlayerCard extends HTMLElement {
       throw new Error(`entity must be an AI Jukebox playlist (${PREFIX}…)`);
     }
     this._config = { ...(config || {}) };
-    if (this._config.entity) this._open.add(this._config.entity);
     this._signature = "";
     if (this._hass) this._render();
   }
@@ -594,6 +597,16 @@ class AiJukeboxPlayerCard extends HTMLElement {
     const p = this._hass.states[entity];
     if (!p) return;
     switch (action) {
+      case "carousel": {
+        const ids = this._sessions().map((x) => x.entity_id);
+        const i = ids.indexOf(entity);
+        this._current = arg === "prev" || arg === "next"
+          ? ids[(i + (arg === "next" ? 1 : -1) + ids.length) % ids.length]
+          : arg;
+        this._signature = "";
+        this._render();
+        return;
+      }
       case "toggle-speakers":
         if (this._open.has(entity)) this._open.delete(entity);
         else this._open.add(entity);
@@ -679,7 +692,24 @@ class AiJukeboxPlayerCard extends HTMLElement {
     } else if (!sessions.length) {
       body = `<div class="empty">${svg(ICONS.music)}<span>Nothing playing</span></div>`;
     } else {
-      body = sessions.map((p) => this._panel(p)).join("");
+      // Several sessions: one at a time, staying on the one picked even as
+      // others start or stop around it.
+      const ids = sessions.map((x) => x.entity_id);
+      if (!ids.includes(this._current)) this._current = ids[0];
+      const cur = sessions[ids.indexOf(this._current)];
+      body = this._panel(cur);
+      if (sessions.length > 1) {
+        const id = esc(cur.entity_id);
+        body = `
+          <div class="carousel">
+            <button class="icon small" data-entity="${id}" data-action="carousel" data-arg="prev" aria-label="Previous playlist">${svg(PLAYER_ICONS.left)}</button>
+            <div class="dots">${sessions.map((x) => `
+              <button class="dot ${x.entity_id === cur.entity_id ? "on" : ""}" data-entity="${id}" data-action="carousel"
+                data-arg="${esc(x.entity_id)}" aria-label="${esc(playlistName(x))}" title="${esc(playlistName(x))}"></button>`).join("")}
+            </div>
+            <button class="icon small" data-entity="${id}" data-action="carousel" data-arg="next" aria-label="Next playlist">${svg(PLAYER_ICONS.right)}</button>
+          </div>${body}`;
+      }
     }
 
     this.shadowRoot.innerHTML = `
@@ -687,6 +717,19 @@ class AiJukeboxPlayerCard extends HTMLElement {
       <ha-card>${body}</ha-card>`;
 
     const root = this.shadowRoot;
+    const panel = root.querySelector(".panel");
+    if (panel && sessions.length > 1 && !this._config.entity) {
+      let x0 = null;
+      panel.addEventListener("pointerdown", (e) => {
+        x0 = e.target.closest("input, button") ? null : e.clientX;
+      });
+      panel.addEventListener("pointerup", (e) => {
+        if (x0 === null) return;
+        const dx = e.clientX - x0;
+        x0 = null;
+        if (Math.abs(dx) > 50) this._onAction(this._current, "carousel", dx < 0 ? "next" : "prev");
+      });
+    }
     root.querySelectorAll("[data-action]").forEach((el) => {
       const { entity, action, arg } = el.dataset;
       if (el.tagName === "INPUT" && el.type === "range") {
@@ -750,11 +793,34 @@ class AiJukeboxPlayerCard extends HTMLElement {
           <input type="range" min="0" max="100" value="${vol}" data-entity="${id}" data-action="volume" aria-label="Volume of every speaker in the session" ${dis}>
           <span class="pct">${vol}%</span>
         </div>
-        ${open ? this._speakerList(p, rows) : (joined.length ? `<div class="joined">${esc(joined.map((r) => r.name).join(", "))}</div>` : "")}
+        ${this._activeSpeakers(p, joined)}
+        ${open ? this._joinList(p, rows) : ""}
       </div>`;
   }
 
-  _speakerList(p, rows) {
+  /** The speakers in the session, each with its own volume. */
+  _activeSpeakers(p, joined) {
+    if (!joined.length) return "";
+    const id = esc(p.entity_id);
+    return `
+      <div class="active">
+        ${joined.map((r) => {
+          const dis = this._pending.has(`${p.entity_id}|${r.id}`) || !r.available ? "disabled" : "";
+          const v = Math.round((r.volume ?? 0) * 100);
+          const note = !r.available ? "unavailable" : r.failed ? "didn't join the group" : "";
+          return `
+            <div class="aspk">
+              <span class="sname">${esc(r.name)}${note ? `<span class="note">${esc(note)}</span>` : ""}</span>
+              <input type="range" min="0" max="100" value="${v}" data-entity="${id}" data-action="speaker-volume"
+                data-arg="${esc(r.id)}" aria-label="${esc(r.name)} volume" ${dis}>
+              <span class="pct">${v}%</span>
+            </div>`;
+        }).join("")}
+      </div>`;
+  }
+
+  /** Every speaker the session can take, with a switch to add or remove it. */
+  _joinList(p, rows) {
     const id = esc(p.entity_id);
     if (!this._settings) return `<div class="speakers"><div class="hint">Loading speakers…</div></div>`;
     if (!rows.length) {
@@ -763,26 +829,17 @@ class AiJukeboxPlayerCard extends HTMLElement {
     }
     return `
       <div class="speakers">
+        <div class="ltitle">Group speakers</div>
         ${rows.map((r) => {
           const key = `${p.entity_id}|${r.id}`;
           const on = this._want.has(key) ? this._want.get(key) : r.joined;
           const dis = this._pending.has(key) || !r.available ? "disabled" : "";
-          const note = !r.available ? "unavailable"
-            : r.failed ? "didn't join the group"
-            : (!r.joined && r.owner) ? `playing ${r.owner}` : "";
-          const v = Math.round((r.volume ?? 0) * 100);
+          const note = !r.available ? "unavailable" : (!r.joined && r.owner) ? `playing ${r.owner}` : "";
           return `
-            <div class="speaker ${r.joined ? "in" : ""}">
-              <label class="row">
-                <input type="checkbox" class="switch" data-entity="${id}" data-action="member" data-arg="${esc(r.id)}" ${on ? "checked" : ""} ${dis}>
-                <span class="sname">${esc(r.name)}${note ? `<span class="note">${esc(note)}</span>` : ""}</span>
-              </label>
-              ${r.joined && r.available ? `
-                <div class="svol">
-                  <input type="range" min="0" max="100" value="${v}" data-entity="${id}" data-action="speaker-volume" data-arg="${esc(r.id)}" aria-label="${esc(r.name)} volume" ${dis}>
-                  <span class="pct">${v}%</span>
-                </div>` : ""}
-            </div>`;
+            <label class="row">
+              <input type="checkbox" class="switch" data-entity="${id}" data-action="member" data-arg="${esc(r.id)}" ${on ? "checked" : ""} ${dis}>
+              <span class="sname">${esc(r.name)}${note ? `<span class="note">${esc(note)}</span>` : ""}</span>
+            </label>`;
         }).join("")}
       </div>`;
   }
@@ -791,7 +848,7 @@ class AiJukeboxPlayerCard extends HTMLElement {
 AiJukeboxPlayerCard.styles = `
   :host { display: block; }
   .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .panel + .panel { border-top: 1px solid var(--divider-color); }
+  .panel { touch-action: pan-y; }
   .top { display: flex; gap: 14px; align-items: center; min-width: 0; }
   .art {
     width: 88px; height: 88px; flex: none; border-radius: 10px; overflow: hidden;
@@ -840,17 +897,27 @@ AiJukeboxPlayerCard.styles = `
   .volume, .svol { display: flex; align-items: center; gap: 8px; }
   input[type=range] { flex: 1; min-width: 0; accent-color: var(--primary-color); }
   .pct { width: 3.2em; text-align: right; font-size: 0.85em; color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
-  .joined { font-size: 0.85em; color: var(--secondary-text-color); }
+  .active { display: flex; flex-direction: column; gap: 4px; }
+  .aspk { display: grid; grid-template-columns: minmax(0, 11em) 1fr auto; align-items: center; gap: 10px; }
+  .aspk .sname { font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .aspk .note { display: block; }
   .speakers {
-    display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; border-radius: 12px;
+    display: flex; flex-direction: column; padding: 4px 12px 8px; border-radius: 12px;
     background: var(--secondary-background-color, rgba(127,127,127,0.08));
   }
-  .speaker { padding: 6px 0; }
-  .speaker + .speaker { border-top: 1px solid var(--divider-color); }
-  .row { display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 32px; }
+  .ltitle { font-size: 0.8em; color: var(--secondary-text-color); padding: 6px 0 2px; }
+  .row { display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 40px; }
+  .row + .row { border-top: 1px solid var(--divider-color); }
+  .carousel { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 0; }
+  .dots { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .dot {
+    width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+    background: var(--divider-color);
+  }
+  .dot.on { background: var(--primary-color); }
+  .carousel + .panel { padding-top: 4px; }
   .sname { color: var(--primary-text-color); display: flex; flex-direction: column; min-width: 0; }
   .note { font-size: 0.8em; color: var(--secondary-text-color); }
-  .svol { padding-left: 52px; }
   .switch {
     appearance: none; -webkit-appearance: none; flex: none; margin: 0; cursor: pointer;
     width: 40px; height: 22px; border-radius: 11px; position: relative;

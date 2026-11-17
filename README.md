@@ -120,21 +120,22 @@ empty, the card points you there.
 
 ### Player card
 
-A now playing card for a running session: artwork, track, why it was picked,
+A now playing card for running sessions: artwork, track, why it was picked,
 progress, play/pause, next/previous, stop, and a volume slider for the whole
-session. The speaker button opens the session's speaker list, with a switch
-to add or remove each one and its own volume once it's in. The list offers
-the same managed speakers, in the same order, plus any speaker already in the
-session that isn't on it.
+session. Under that are the speakers in the session, each with its own
+volume. The speaker button opens a list of speakers with a switch to add or
+remove each one: the managed speakers in Configure order, plus any speaker
+already in the session that isn't on it.
 
 ```yaml
 type: custom:ai-jukebox-player-card
 entity: media_player.ai_jukebox_my_playlist   # optional
 ```
 
-With `entity`, it follows that one playlist and opens with its speaker list
-showing. Without it, it shows every playlist that has speakers attached, and
-says "Nothing playing" when none do.
+Without `entity`, the card follows every playlist that has speakers
+attached. With more than one, it shows one at a time: switch with the arrows,
+the dots, or a swipe. It says "Nothing playing" when none are active. With
+`entity`, it follows that one playlist only.
 
 ## Actions
 
