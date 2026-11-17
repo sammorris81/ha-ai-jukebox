@@ -34,6 +34,9 @@ overnight, one playlist per hour inside a window you choose.
 - **Home Assistant 2026.10** or newer.
 - **[Music Assistant](https://music-assistant.io/)** with its Home Assistant
   integration set up, and the speakers you want to use exposed through it.
+  Either way of running it works, as a Home Assistant app or as a separate
+  server: AI Jukebox talks to it through the connection the integration
+  already has.
 - **Apple Music** as a Music Assistant provider. The builder only keeps tracks
   it can play from Apple Music. Other providers are not supported yet.
 - At least one **AI Task** entity (`ai_task.*`), for example from the Google

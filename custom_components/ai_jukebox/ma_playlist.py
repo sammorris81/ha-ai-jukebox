@@ -1,9 +1,15 @@
 """Music Assistant RPC transport for AI Jukebox.
 
-Talks to MA's own HTTP RPC API (POST {url}/api) using the `music_assistant`
-config entry's stored url+token — the same transport
-media_player._ma_http_call() has always used for commands no HA service
-wraps.
+Sends MA API commands for which no HA service exists. Preferred transport is
+the websocket client Home Assistant's own `music_assistant` integration
+already holds (`entry.runtime_data.mass.send_command`): it works however MA
+is installed, because HA has to reach it anyway. MA as a Home Assistant app
+is configured by discovery with an internal-only address, and an MA server
+without login stores no token, and the HTTP path cannot rely on either.
+
+Fallback, only when that client is not available (integration not loaded,
+or the dev harness, which has no HA): MA's HTTP RPC API (POST {url}/api)
+with the config entry's stored url+token. Both return the same JSON result.
 
 This module issues no commands of its own: callers pass the command string,
 so every MA command the integration sends lives at its call site. Today
@@ -48,10 +54,24 @@ async def async_ma_call(
     args: dict | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> dict | list | None:
-    """POST one MA RPC command. Raises MAPlaylistError on any failure."""
+    """Send one MA command. Raises MAPlaylistError on any failure."""
     entries = hass.config_entries.async_entries(MA_DOMAIN)
     if not entries:
         raise MAPlaylistError("No Music Assistant config entry is set up")
+
+    client = _ha_client(entries)
+    if client is not None:
+        try:
+            return await asyncio.wait_for(
+                client.send_command(command, **(args or {})), timeout)
+        except asyncio.TimeoutError as err:
+            raise MAPlaylistError(f"MA command '{command}' timed out") from err
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # noqa: BLE001 - the client raises its own hierarchy
+            raise MAPlaylistError(
+                f"MA command '{command}' failed: {type(err).__name__}: {err}") from err
+
     url = entries[0].data.get("url")
     token = entries[0].data.get("token")
     if not url or not token:
@@ -81,6 +101,16 @@ async def async_ma_call(
     if isinstance(data, dict) and "error_code" in data:
         raise MAPlaylistError(f"MA command '{command}' errored: {data}")
     return data
+
+
+def _ha_client(entries):
+    """The connected MA client of a loaded music_assistant entry, or None."""
+    for entry in entries:
+        mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
+        connection = getattr(mass, "connection", None)
+        if mass is not None and getattr(connection, "connected", False):
+            return mass
+    return None
 
 
 def normalize_uri(uri: str | None) -> str:

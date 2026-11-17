@@ -276,3 +276,22 @@ async def test_card_is_served(hass: HomeAssistant, hass_client) -> None:
     resp = await client.get("/ai_jukebox/ai-jukebox-card.js")
     assert resp.status == 200
     assert "ai-jukebox-card" in await resp.text()
+
+
+async def test_ma_call_prefers_ha_client(hass: HomeAssistant) -> None:
+    """Builder calls go through HA's own MA connection when it is up, which
+    needs no url/token (MA as an HA app, or an MA without login)."""
+    from types import SimpleNamespace
+    from custom_components.ai_jukebox import ma_playlist
+
+    client = SimpleNamespace(connection=SimpleNamespace(connected=True),
+                             send_command=AsyncMock(return_value={"albums": []}))
+    entry = MockConfigEntry(domain="music_assistant", data={})
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(mass=client)
+    assert await ma_playlist.async_ma_call(hass, "music/search", {"search_query": "x"}) == {"albums": []}
+    client.send_command.assert_awaited_once_with("music/search", search_query="x")
+
+    client.connection.connected = False  # falls back to HTTP, which has no url/token here
+    with pytest.raises(ma_playlist.MAPlaylistError, match="no url/token"):
+        await ma_playlist.async_ma_call(hass, "music/search", {})
