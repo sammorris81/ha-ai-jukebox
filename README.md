@@ -115,7 +115,26 @@ seed artists, and for each active session its status, what's playing, what's
 next, and why each track was picked. Any playlist with an error gets a banner.
 
 The speaker list only offers the speakers allowed on the integration's
-**Configure** page. If that list is empty, the card points you there.
+**Configure** page, in the order you arrange them there. If that list is
+empty, the card points you there.
+
+### Player card
+
+A now playing card for a running session: artwork, track, why it was picked,
+progress, play/pause, next/previous, stop, and a volume slider for the whole
+session. The speaker button opens the session's speaker list, with a switch
+to add or remove each one and its own volume once it's in. The list offers
+the same managed speakers, in the same order, plus any speaker already in the
+session that isn't on it.
+
+```yaml
+type: custom:ai-jukebox-player-card
+entity: media_player.ai_jukebox_my_playlist   # optional
+```
+
+With `entity`, it follows that one playlist and opens with its speaker list
+showing. Without it, it shows every playlist that has speakers attached, and
+says "Nothing playing" when none do.
 
 ## Actions
 

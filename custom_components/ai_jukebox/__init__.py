@@ -142,7 +142,7 @@ def websocket_settings(hass: HomeAssistant, connection, msg: dict) -> None:
     """
     data = hass.data.get(DOMAIN, {})
     connection.send_result(msg["id"], {
-        "managed_speakers": sorted(data.get(CONF_MANAGED_SPEAKERS) or ()),
+        "managed_speakers": list(data.get("managed_speakers_ordered") or ()),
         "configured": "entry" in data,
         "entry_id": data["entry"].entry_id if "entry" in data else None,
     })
@@ -196,6 +196,9 @@ def _apply_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     data = hass.data[DOMAIN]
     data["build_ai_entities"] = tuple(entry.options.get(CONF_BUILD_AI_ENTITIES) or ()) or None
     data[CONF_MANAGED_SPEAKERS] = frozenset(entry.options.get(CONF_MANAGED_SPEAKERS) or ())
+    # The set answers "is this speaker managed"; the cards list them in the
+    # order they were arranged on the Configure page.
+    data["managed_speakers_ordered"] = list(entry.options.get(CONF_MANAGED_SPEAKERS) or ())
     data[CONF_REBUILD_START_HOUR] = int(
         entry.options.get(CONF_REBUILD_START_HOUR, DEFAULT_REBUILD_START_HOUR))
     data[CONF_REBUILD_END_HOUR] = int(

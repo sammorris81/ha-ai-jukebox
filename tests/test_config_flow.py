@@ -266,7 +266,8 @@ async def test_card_settings_ws(hass: HomeAssistant, hass_ws_client) -> None:
     await client.send_json_auto_id({"type": "ai_jukebox/settings"})
     msg = await client.receive_json()
     assert msg["success"]
-    assert msg["result"]["managed_speakers"] == ["media_player.a", "media_player.b"]
+    # Configure order, not sorted: the cards list speakers as arranged there.
+    assert msg["result"]["managed_speakers"] == ["media_player.b", "media_player.a"]
     assert msg["result"]["configured"] is True
 
 
