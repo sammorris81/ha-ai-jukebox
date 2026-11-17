@@ -63,7 +63,7 @@ _LIST_FIELDS = (
 
 def _ai_entities_selector() -> selector.EntitySelector:
     return selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="ai_task", multiple=True)
+        selector.EntitySelectorConfig(domain="ai_task", multiple=True, reorder=True)
     )
 
 
@@ -165,7 +165,9 @@ class AiJukeboxOptionsFlow(config_entries.OptionsFlow):
             {
                 vol.Required(CONF_BUILD_AI_ENTITIES): _ai_entities_selector(),
                 vol.Optional(CONF_MANAGED_SPEAKERS): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="media_player", multiple=True)
+                    selector.EntitySelectorConfig(
+                        domain="media_player", multiple=True, reorder=True
+                    )
                 ),
                 vol.Required(CONF_AUTO_REBUILD): selector.BooleanSelector(),
                 vol.Required(CONF_REBUILD_START_HOUR): _hour_selector(),
