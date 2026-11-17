@@ -287,7 +287,7 @@ class AiJukeboxCard extends HTMLElement {
           <div class="buttons">
             <button id="play" class="primary" title="Play" aria-label="Play" ${canPlay ? "" : "disabled"}>${svg(ICONS.play)}</button>
             <button id="stop" title="Stop" aria-label="Stop" ${!this._pending && sel && ["playing", "paused"].includes(sel.state) ? "" : "disabled"}>${svg(ICONS.stop)}</button>
-            <button id="surprise" title="Surprise me" aria-label="Surprise me" ${canPlay && playlists.length > 1 ? "" : "disabled"}>${svg(ICONS.dice)}</button>
+            <button id="surprise" class="pill" title="Play a random playlist on the chosen speaker" ${canPlay && playlists.length > 1 ? "" : "disabled"}>${svg(ICONS.dice)}<span>Feeling lucky</span></button>
           </div>
         </div>
         ${sel ? `
@@ -368,6 +368,8 @@ AiJukeboxCard.styles = `
     color: var(--primary-text-color);
   }
   button.primary { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+  /* The dice alone didn't say what it does, so it carries a label. */
+  button.pill { width: auto; border-radius: 24px; padding: 0 16px 0 12px; display: flex; gap: 6px; align-items: center; font: inherit; font-weight: 500; white-space: nowrap; }
   button:disabled { opacity: 0.4; cursor: default; }
   button:not(:disabled):hover { filter: brightness(1.1); }
   button:focus-visible, select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
