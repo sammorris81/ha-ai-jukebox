@@ -240,7 +240,7 @@ def _async_sync_players(hass: HomeAssistant, entry: ConfigEntry) -> None:
     domain["_playlist_snapshot"] = current
 
 
-def _setup_scheduler(hass: HomeAssistant, entry: ConfigEntry) -> None:
+def _setup_scheduler(hass: HomeAssistant, entry: ConfigEntry) -> list:
     """Nightly pool refresh plus resumption of builds that died mid-flight.
 
     Replaces two automations that used to live in the author's own packages,
@@ -279,13 +279,29 @@ def _setup_scheduler(hass: HomeAssistant, entry: ConfigEntry) -> None:
                 _LOGGER.info("Resuming stalled pool build: %s", player.playlist_name)
                 await player.async_rebuild_pool(force=True, resume=True)
 
-    entry.async_on_unload(async_track_time_change(hass, _hourly, minute=0, second=0))
-    entry.async_on_unload(async_track_time_interval(
-        hass, _resume_stalled, timedelta(minutes=RESUME_STALLED_BUILD_MINUTES)))
-    # Also shortly after setup, so a build cut off by a restart does not wait
-    # for the first interval. Delayed rather than immediate: players read
-    # their pool stats as they are added, which takes a moment.
-    entry.async_on_unload(async_call_later(hass, 60, _resume_stalled))
+    return [
+        async_track_time_change(hass, _hourly, minute=0, second=0),
+        async_track_time_interval(
+            hass, _resume_stalled, timedelta(minutes=RESUME_STALLED_BUILD_MINUTES)),
+        # Also shortly after setup, so a build cut off by a restart does not
+        # wait for the first interval. Delayed rather than immediate: players
+        # read their pool stats as they are added, which takes a moment.
+        async_call_later(hass, 60, _resume_stalled),
+    ]
+
+
+@callback
+def _async_apply_scheduler(hass: HomeAssistant, entry: ConfigEntry, unsubs: list) -> None:
+    """(Re)arm the scheduler to match the auto_rebuild option.
+
+    `unsubs` is owned by the entry's setup rather than kept in hass.data:
+    async_unload_entry replaces hass.data[DOMAIN] before the entry's unload
+    callbacks run, so a list kept there could never be cancelled.
+    """
+    while unsubs:
+        unsubs.pop()()
+    if entry.options.get(CONF_AUTO_REBUILD, DEFAULT_AUTO_REBUILD):
+        unsubs.extend(_setup_scheduler(hass, entry))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -314,17 +330,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]["_playlist_snapshot"] = _playlist_snapshot(entry)
 
     async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-        # Options changes are rare and reach the scheduler and every player,
-        # so they take the full reload. Playlist edits must not -- see
-        # _async_sync_players.
+        # Nothing here reloads the entry. Every option is read where it is
+        # used (hass.data), so applying one in place is enough -- and a reload
+        # suspends every live session, which in practice did not survive it:
+        # on 2026-11-17 two Configure saves in a row left a playing Sonos idle
+        # and the session ended. Playlist edits are likewise adopted in place,
+        # see _async_sync_players.
         if dict(entry.options) != hass.data[DOMAIN].get("_options_snapshot"):
-            await hass.config_entries.async_reload(entry.entry_id)
-            return
+            _apply_options(hass, entry)
+            _async_apply_scheduler(hass, entry, scheduler_unsubs)
+            hass.data[DOMAIN]["_options_snapshot"] = dict(entry.options)
         _async_sync_players(hass, entry)
 
     entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
-    if entry.options.get(CONF_AUTO_REBUILD, DEFAULT_AUTO_REBUILD):
-        _setup_scheduler(hass, entry)
+    scheduler_unsubs: list = []
+    _async_apply_scheduler(hass, entry, scheduler_unsubs)
+
+    @callback
+    def _cancel_scheduler() -> None:
+        while scheduler_unsubs:
+            scheduler_unsubs.pop()()
+
+    entry.async_on_unload(_cancel_scheduler)
 
     def _resolve_target_entity_id(call: ServiceCall) -> str:
         """Pull the single targeted media_player.ai_jukebox_* entity_id off a call.

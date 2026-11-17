@@ -180,7 +180,7 @@ async def test_save_playlist_service(hass: HomeAssistant) -> None:
     assert hass.states.get("media_player.ai_jukebox_service_made") is None
 
 
-async def test_options_flow_reloads(hass: HomeAssistant) -> None:
+async def test_options_apply_without_reload(hass: HomeAssistant) -> None:
     entry = await _setup_legacy(hass)
     old = hass.data[DOMAIN]["players"]["the_orchestral_arena"]
     result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -193,7 +193,9 @@ async def test_options_flow_reloads(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert hass.data[DOMAIN]["managed_speakers"] == frozenset({"media_player.kitchen"})
     assert hass.data[DOMAIN]["build_ai_entities"] == ("ai_task.c",)
-    assert hass.data[DOMAIN]["players"]["the_orchestral_arena"] is not old
+    # Applied in place: no reload, so live sessions are not suspended.
+    assert hass.data[DOMAIN]["players"]["the_orchestral_arena"] is old
+    assert hass.data[DOMAIN]["rebuild_start_hour"] == 23
 
 
 async def test_fresh_setup(hass: HomeAssistant) -> None:
