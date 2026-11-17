@@ -284,7 +284,12 @@ def in_rebuild_window(hour: int, start: int, end: int) -> bool:
 class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
     """One AI-generated playlist session, modeled as a virtual media_player."""
 
-    _attr_has_entity_name = False
+    # The entity is its device's main feature, so it takes the device's name
+    # outright (name None). With has_entity_name False, HA 2026.11 still
+    # prefixed the device name, and every friendly_name came out doubled:
+    # "The Orchestral Arena AI Jukebox The Orchestral Arena".
+    _attr_has_entity_name = True
+    _attr_name = None
     _attr_should_poll = False
     _attr_media_content_type = MediaType.MUSIC
 
@@ -307,13 +312,14 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         # underscore form the registry already holds. Same normalisation as
         # _get_player_or_raise() in __init__.py.
         self.entity_id = f"media_player.ai_jukebox_{slug.replace('-', '_')}"
-        self._attr_name = f"AI Jukebox {self._playlist_name}"
         # One device per playlist, keyed on the slug rather than the subentry
         # id: entity_id, unique_id and the queue/pool files are all keyed on
-        # the slug, so the device is too.
+        # the slug, so the device is too. The device name is what the entity's
+        # friendly_name becomes, and it keeps the "AI Jukebox " prefix that
+        # friendly names have always had -- dashboards and scripts match on it.
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, slug)},
-            name=self._playlist_name,
+            name=f"AI Jukebox {self._playlist_name}",
             manufacturer="AI Jukebox",
             model="Playlist",
             entry_type=DeviceEntryType.SERVICE,

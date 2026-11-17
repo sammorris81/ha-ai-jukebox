@@ -93,7 +93,9 @@ async def test_migration(hass: HomeAssistant, legacy_store) -> None:
     reg = ent_reg.async_get("media_player.ai_jukebox_the_orchestral_arena")
     assert reg is not None and reg.config_subentry_id == arena.subentry_id
     device = dev_reg.async_get(reg.device_id)
-    assert device.name == "The Orchestral Arena"
+    assert device.name == "AI Jukebox The Orchestral Arena"
+    state = hass.states.get("media_player.ai_jukebox_the_orchestral_arena")
+    assert state.attributes["friendly_name"] == "AI Jukebox The Orchestral Arena"
     assert (DOMAIN, "the_orchestral_arena") in device.identifiers
     # Hyphenated slug still maps to the underscore entity_id.
     assert hass.states.get("media_player.ai_jukebox_country_pop_storytellers")
