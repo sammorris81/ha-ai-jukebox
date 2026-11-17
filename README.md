@@ -45,6 +45,15 @@ overnight, one playlist per hour inside a window you choose.
 
 ## Installation (HACS)
 
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sammorris81&repository=ha-ai-jukebox&category=integration)
+
+The button opens this repository in HACS on your own Home Assistant, ready to
+download. Then restart Home Assistant and add the integration:
+
+[![Open your Home Assistant instance and start setting up AI Jukebox.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ai_jukebox)
+
+Or by hand:
+
 1. In HACS, open the menu (⋮) and choose **Custom repositories**.
 2. Add `https://github.com/sammorris81/ha-ai-jukebox` with the type
    **Integration**.
