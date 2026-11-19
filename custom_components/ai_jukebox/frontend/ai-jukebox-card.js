@@ -459,6 +459,9 @@ class AiJukeboxPlayerCard extends HTMLElement {
     // Where a speaker switch was flipped to, held until the call returns, so
     // it doesn't snap back while the speaker takes seconds to join.
     this._want = new Map();
+    // Volume just set from a slider, per entity: shown until HA reports it
+    // (or a few seconds pass), so the slider doesn't jump back on release.
+    this._volHold = new Map();
     this._dragging = false;
     this._ticker = null;
   }
@@ -633,6 +636,7 @@ class AiJukeboxPlayerCard extends HTMLElement {
           this._call("media_player", "volume_mute", { is_volume_muted: !p.attributes.is_volume_muted }, entity));
         return;
       case "volume":
+        this._volHold.set(entity, { value: arg, until: Date.now() + 5000 });
         this._run(entity, "Volume", () =>
           this._call("media_player", "volume_set", { volume_level: arg / 100 }, entity));
         return;
@@ -648,6 +652,7 @@ class AiJukeboxPlayerCard extends HTMLElement {
         return;
       }
       case "speaker-volume":
+        this._volHold.set(arg.id, { value: arg.value, until: Date.now() + 5000 });
         this._run(`${entity}|${arg.id}`, "Volume", () =>
           this._call("media_player", "volume_set", { volume_level: arg.value / 100 }, arg.id));
         return;
@@ -736,6 +741,11 @@ class AiJukeboxPlayerCard extends HTMLElement {
       const { entity, action, arg } = el.dataset;
       if (el.tagName === "INPUT" && el.type === "range") {
         el.addEventListener("pointerdown", () => { this._dragging = true; });
+        // Keep the percentage beside the slider in step while it's dragged.
+        el.addEventListener("input", () => {
+          const pct = el.parentElement.querySelector(".pct");
+          if (pct) pct.textContent = `${el.value}%`;
+        });
         el.addEventListener("change", () => {
           this._dragging = false;
           const value = Number(el.value);
@@ -760,7 +770,7 @@ class AiJukeboxPlayerCard extends HTMLElement {
     const badge = ACTIVITY_LABEL[activity]
       ? `<span class="badge ${activity === "error" ? "bad" : ""}">${esc(ACTIVITY_LABEL[activity])}</span>` : "";
     const pr = this._position(p);
-    const vol = Math.round((a.volume_level ?? 0) * 100);
+    const vol = this._volume(p.entity_id, a.volume_level);
     const rows = this._speakerRows(p);
     const joined = rows.filter((r) => r.joined);
     const open = this._open.has(p.entity_id);
@@ -792,12 +802,24 @@ class AiJukeboxPlayerCard extends HTMLElement {
         </div>
         <div class="volume">
           <button class="icon small" data-entity="${id}" data-action="mute" aria-label="${a.is_volume_muted ? "Unmute" : "Mute"}" ${dis}>${svg(a.is_volume_muted ? PLAYER_ICONS.muted : PLAYER_ICONS.volume)}</button>
-          <input type="range" min="0" max="100" value="${vol}" data-entity="${id}" data-action="volume" aria-label="Volume of every speaker in the session" ${dis}>
+          <input type="range" min="0" max="100" step="5" value="${vol}" data-entity="${id}" data-action="volume" aria-label="Volume of every speaker in the session" ${dis}>
           <span class="pct">${vol}%</span>
         </div>
         ${this._activeSpeakers(p, joined)}
         ${open ? this._joinList(p, rows) : ""}
       </div>`;
+  }
+
+  /** Volume as a whole percent, preferring one just set over a stale state. */
+  _volume(entityId, level) {
+    const actual = Math.round((level ?? 0) * 100);
+    const hold = this._volHold.get(entityId);
+    if (!hold) return actual;
+    if (hold.value === actual || Date.now() > hold.until) {
+      this._volHold.delete(entityId);
+      return actual;
+    }
+    return hold.value;
   }
 
   /** The speakers in the session, each with its own volume. */
@@ -808,12 +830,12 @@ class AiJukeboxPlayerCard extends HTMLElement {
       <div class="active">
         ${joined.map((r) => {
           const dis = this._pending.has(`${p.entity_id}|${r.id}`) || !r.available ? "disabled" : "";
-          const v = Math.round((r.volume ?? 0) * 100);
+          const v = this._volume(r.id, r.volume);
           const note = !r.available ? "unavailable" : r.failed ? "didn't join the group" : "";
           return `
             <div class="aspk">
               <span class="sname">${esc(r.name)}${note ? `<span class="note">${esc(note)}</span>` : ""}</span>
-              <input type="range" min="0" max="100" value="${v}" data-entity="${id}" data-action="speaker-volume"
+              <input type="range" min="0" max="100" step="5" value="${v}" data-entity="${id}" data-action="speaker-volume"
                 data-arg="${esc(r.id)}" aria-label="${esc(r.name)} volume" ${dis}>
               <span class="pct">${v}%</span>
             </div>`;
