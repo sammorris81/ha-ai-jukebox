@@ -283,7 +283,13 @@ class PlaylistSubentryFlow(ConfigSubentryFlow):
 
         # A new playlist has an empty pool and cannot play until it is built,
         # so building straight away is the default here and not on edit.
-        suggested = {**_FORM_DEFAULTS, CONF_BUILD_NOW: True, **(user_input or {})}
+        # exclude_genres is pre-filled only here: listing christmas/holiday
+        # is also what keeps Christmas albums and songs out of the build
+        # (build/catalog.py: excludes_holiday), so a new playlist keeps that
+        # unless whoever adds it deletes the entry. Not in _FORM_DEFAULTS, so
+        # editing an existing playlist never adds it behind the user's back.
+        suggested = {**_FORM_DEFAULTS, CONF_PLAYLIST_EXCLUDE_GENRES: ["christmas", "holiday"],
+                     CONF_BUILD_NOW: True, **(user_input or {})}
         return self.async_show_form(
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(

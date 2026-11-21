@@ -29,7 +29,7 @@ from ..const import (
     PLAYS_RETENTION_HOURS,
 )
 from . import curate
-from .catalog import catalogue_for
+from .catalog import catalogue_for, excludes_holiday
 from .llm import BuildModel
 from .roster import build_roster
 
@@ -210,9 +210,17 @@ class PoolBuilder:
             cutoff = (dt_util.utcnow() - timedelta(hours=PLAYS_RETENTION_HOURS)).isoformat()
             await self._store.async_prune_plays(self._name, cutoff)
 
+        # The playlist's own title filters. Holiday has no toggle of its own:
+        # it follows exclude_genres (catalog.excludes_holiday).
+        filters = {
+            "exclude_live": config.get("exclude_live", True),
+            "exclude_remix": config.get("exclude_remix", True),
+            "exclude_holiday": excludes_holiday(config.get("exclude_genres")),
+        }
         catalogues: dict[str, list[dict]] = {}
         for entry in roster:
-            albums = await catalogue_for(self._hass, entry["artist"], entry.get("album"))
+            albums = await catalogue_for(self._hass, entry["artist"], entry.get("album"),
+                                         **filters)
             if albums:
                 catalogues[entry["artist"]] = albums
                 self.stats["resolved"] += 1
@@ -252,7 +260,8 @@ class PoolBuilder:
                     name = member.get("artist")
                     if not name or name in catalogues:
                         continue
-                    albums = await catalogue_for(self._hass, name, member.get("album"))
+                    albums = await catalogue_for(self._hass, name, member.get("album"),
+                                                 **filters)
                     if albums:
                         catalogues[name] = albums
                         self.stats["resolved"] += 1
@@ -356,22 +365,25 @@ class PoolBuilder:
         if not group:
             return 0
 
-        kept = await curate.select_albums(self._model, prompt, group)
-        if kept is None:
-            raise RuntimeError("album selection failed after all model entities")
-        self.stats["albums"] += sum(len(v) for v in kept.values())
-
         # Read per-batch rather than relying on run() having stashed it:
         # _run_batch is also reachable on the resume path.
         batch_config = self._store.get_playlist(self._name) or {}
         exclude_live = batch_config.get("exclude_live", True)
         exclude_remix = batch_config.get("exclude_remix", True)
+        exclude_holiday = excludes_holiday(batch_config.get("exclude_genres"))
+
+        kept = await curate.select_albums(self._model, prompt, group,
+                                          exclude_live=exclude_live,
+                                          exclude_remix=exclude_remix)
+        if kept is None:
+            raise RuntimeError("album selection failed after all model entities")
+        self.stats["albums"] += sum(len(v) for v in kept.values())
 
         with_tracks: list[tuple[dict, list[dict]]] = []
         for albums in kept.values():
             for album in albums:
                 tracks = await curate.fetch_tracks(
-                    self._hass, album, exclude_live, exclude_remix)
+                    self._hass, album, exclude_live, exclude_remix, exclude_holiday)
                 if tracks:
                     with_tracks.append((album, tracks))
         if not with_tracks:

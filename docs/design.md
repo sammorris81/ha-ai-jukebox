@@ -50,9 +50,11 @@ to. The fields that matter to the builder:
   derived and disposable.
 - `exclude_artists` — artists that must never appear
 - `genres` — optional allow-list of genres to stay within
-- `exclude_genres` — genres that must never appear
-- `exclude_live`, `exclude_remix` — whether live takes and remixes are dropped
-  from album listings (§3.6)
+- `exclude_genres` — genres that must never appear. Listing christmas, xmas or
+  holiday(s) here also turns on the holiday title filter (§3.6); it is the one
+  part of this field that is enforced, not just advised.
+- `exclude_live`, `exclude_remix` — whether live and remix albums and tracks
+  are dropped, at both the album and track stage (§3.6)
 
 **Why policy is in fields rather than prose (2026-09-28).** The prompt used to
 carry everything: description, genre exclusions, an artist-calibration sentence,
@@ -331,6 +333,33 @@ IDs. Disc 1 is the original album, so lowest-disc wins — but a rule like "more
 than two discs means box set" would mangle genuine double albums, and *Mellon
 Collie* is exactly that. With both rules: *Adore* 90→24, *Mellon Collie* 28→28,
 Queen's *Innuendo* 17→12 (it is a 12-track album), and ordinary albums untouched.
+
+**Per-playlist title filters (2026-11-21).** On top of those two rules, album
+titles (in `build/catalog.py`) and track names (in `dedupe_album_tracks`) are
+filtered by keyword in four groups. Karaoke, tribute, instrumental, demo and
+commentary releases are always dropped. Live, remix and holiday titles are
+dropped per playlist: live and remix follow `exclude_live`/`exclude_remix`, and
+holiday (christmas, xmas, noël, holiday, yule, santa, merry, winter wonderland)
+is on when `exclude_genres` names christmas, xmas or holiday(s). The add-playlist
+form pre-fills `exclude_genres` with "christmas, holiday", so that stays the
+default.
+
+Before this, the album stage applied all four groups unconditionally. The two
+toggles reached only track names, and the holiday group was on for every
+playlist, which left the one Christmas playlist with almost no Christmas music:
+every album titled *Merry Christmas* or *Christmas Portrait* and every song with
+"Christmas" or "Santa" in the name was gone, so the pool fell back on carols
+whose titles happen to avoid the keywords ("O Holy Night" eight times) and on
+artists' regular albums.
+
+The catalogue cache (`catalog/<artist_id>.json`) is shared by every playlist, so
+it stores albums filtered by the always-on group only (`"schema": 2`), and each
+playlist's three filters run when an entry is read. An entry with no `schema`
+predates that and is missing the live, remix and holiday albums. It still
+serves a playlist that excludes all three, which is every playlist by default.
+A playlist that allows any of them treats it as a miss and refetches, which
+upgrades the entry for everyone. That avoids refetching thousands of artists at
+once.
 
 This is also where `normalize_track` lives, and the only place it is needed: the
 builder must recognise that the same song appearing on two of an artist's albums

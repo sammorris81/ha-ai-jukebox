@@ -25,6 +25,7 @@ from ..track_processing import is_live, is_remix, normalize_track
 from .catalog import (
     APPLE_DOMAIN,
     BAD_ALBUM_ALWAYS,
+    BAD_ALBUM_HOLIDAY,
     BAD_ALBUM_LIVE,
     BAD_ALBUM_REMIX,
 )
@@ -87,7 +88,8 @@ def _base_title(name: str) -> str:
 
 
 def dedupe_album_tracks(tracks: list[dict], exclude_live: bool = True,
-                        exclude_remix: bool = True) -> list[dict]:
+                        exclude_remix: bool = True,
+                        exclude_holiday: bool = True) -> list[dict]:
     """Drop non-canonical takes from one album's listing.
 
     `exclude_live`/`exclude_remix` come from the playlist's own config and
@@ -115,6 +117,7 @@ def dedupe_album_tracks(tracks: list[dict], exclude_live: bool = True,
                         or (exclude_remix and is_remix(version))):
             continue
         if (BAD_ALBUM_ALWAYS.search(name) or _VARIANT.search(name)
+                or (exclude_holiday and BAD_ALBUM_HOLIDAY.search(name))
                 or (exclude_live and (BAD_ALBUM_LIVE.search(name) or is_live(name)))
                 or (exclude_remix and (BAD_ALBUM_REMIX.search(name) or is_remix(name)))):
             continue
@@ -149,7 +152,8 @@ def batches(roster_albums: dict[str, list[dict]], seeds: set[str]) -> list[list[
 
 
 async def select_albums(
-    model: BuildModel, prompt: str, group: list[tuple[str, list[dict]]]
+    model: BuildModel, prompt: str, group: list[tuple[str, list[dict]]], *,
+    exclude_live: bool = True, exclude_remix: bool = True,
 ) -> dict[str, list[dict]] | None:
     """Which of each artist's albums belong. None if the call failed."""
     lines: list[str] = []
@@ -162,6 +166,14 @@ async def select_albums(
             numbered[idx] = album
             idx += 1
 
+    # The skip list follows the playlist's toggles: telling the model to skip
+    # live albums on a playlist that allows them undid exclude_live in prose.
+    skip = ["greatest-hits and 'best of' compilations"]
+    if exclude_live:
+        skip.append("live albums")
+    skip.append("remix and demo collections" if exclude_remix else "demo collections")
+    skip += ["soundtracks", "anniversary re-releases", "and EPs or singles"]
+
     instructions = (
         f"Playlist description: {prompt}\n\n"
         "Below are candidate albums grouped by artist. Each of these artists was "
@@ -173,8 +185,7 @@ async def select_albums(
         "Rules per artist:\n"
         f"- Keep their strongest studio albums for this playlist: at least "
         f"{BUILD_MIN_ALBUMS}, and up to {BUILD_MAX_ALBUMS} if that many genuinely fit.\n"
-        "- Skip greatest-hits and 'best of' compilations, live albums, remix and demo "
-        "collections, soundtracks, anniversary re-releases, and EPs or singles.\n"
+        f"- Skip {', '.join(skip)}.\n"
         f"- If an artist has fewer than {BUILD_MIN_ALBUMS} eligible studio albums, keep "
         "whatever studio albums they do have.\n\n"
         "Return one entry per artist, giving the album NUMBERS you kept, not their "
@@ -232,7 +243,8 @@ def _apple_uri(track: dict) -> str | None:
 
 
 async def fetch_tracks(hass: HomeAssistant, album: dict, exclude_live: bool = True,
-                       exclude_remix: bool = True) -> list[dict]:
+                       exclude_remix: bool = True,
+                       exclude_holiday: bool = True) -> list[dict]:
     """One album's usable track listing, each rewritten to its Apple uri."""
     try:
         raw = await async_ma_call(
@@ -246,7 +258,7 @@ async def fetch_tracks(hass: HomeAssistant, album: dict, exclude_live: bool = Tr
 
     out = []
     dropped = 0
-    for t in dedupe_album_tracks(raw or [], exclude_live, exclude_remix):
+    for t in dedupe_album_tracks(raw or [], exclude_live, exclude_remix, exclude_holiday):
         uri = _apple_uri(t)
         if uri is None:
             dropped += 1
