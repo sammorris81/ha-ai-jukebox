@@ -98,6 +98,10 @@ Choose **Configure** on the integration itself:
 - **Rebuild pools overnight**, and the window it runs in (02:00 to 05:00 by
   default). The rebuild also resumes builds that were cut off by a restart.
 
+To rebuild one playlist now, press **Rebuild pool** on its device page
+(`button.ai_jukebox_<playlist>_rebuild_pool`). The button works at any hour,
+and you can put it on a dashboard or call it from an automation.
+
 ## Dashboard card
 
 The integration ships its own card, which loads automatically. There's
@@ -144,7 +148,7 @@ the dots, or a swipe. It says "Nothing playing" when none are active. With
 | `ai_jukebox.start` | Start a playlist on one or more speakers. |
 | `ai_jukebox.stop` | Stop it, or detach some speakers only. |
 | `ai_jukebox.attach_speaker` / `detach_speaker` | Add or remove speakers from a running session. `media_player.join` on the playlist entity works too. |
-| `ai_jukebox.rebuild_pool` | Rebuild a playlist's pool. Outside the rebuild window, this needs `force: true`. |
+| `ai_jukebox.rebuild_pool` | Rebuild a playlist's pool. Outside the rebuild window, this needs `force: true`. Each playlist's **Rebuild pool** button does the same, forced. |
 | `ai_jukebox.save_playlist` / `delete_playlist` / `list_playlists` | Manage playlists from automations. |
 | `ai_jukebox.clear_history` | Forget what a playlist has played, which resets repeat avoidance. |
 | `ai_jukebox.reset` | Force a stuck session back to idle. |

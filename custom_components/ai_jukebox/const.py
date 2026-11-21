@@ -214,7 +214,7 @@ CONF_PLAYLIST_EXCLUDE_GENRES: Final = "exclude_genres"
 # is never pulled into a session. Chosen in the integration's options.
 CONF_MANAGED_SPEAKERS: Final = "managed_speakers"
 
-PLATFORMS: Final = [Platform.MEDIA_PLAYER]
+PLATFORMS: Final = [Platform.MEDIA_PLAYER, Platform.BUTTON]
 
 # (A per-entity backoff constant lived here, for retreating from an ai_task
 # entity after repeated generation failures. It went with LLM track generation;

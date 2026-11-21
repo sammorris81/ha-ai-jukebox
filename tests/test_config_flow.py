@@ -296,3 +296,42 @@ async def test_ma_call_prefers_ha_client(hass: HomeAssistant) -> None:
     client.connection.connected = False  # falls back to HTTP, which has no url/token here
     with pytest.raises(ma_playlist.MAPlaylistError, match="no url/token"):
         await ma_playlist.async_ma_call(hass, "music/search", {})
+
+
+async def test_rebuild_button(hass: HomeAssistant) -> None:
+    """Each playlist gets a forced-rebuild button on its own device."""
+    entry = await _setup_legacy(hass)
+    ent_reg, dev_reg = er.async_get(hass), dr.async_get(hass)
+    button_id = "button.ai_jukebox_the_orchestral_arena_rebuild_pool"
+    assert hass.states.get(button_id)
+    button = ent_reg.async_get(button_id)
+    player = ent_reg.async_get("media_player.ai_jukebox_the_orchestral_arena")
+    assert button.device_id == player.device_id
+    assert dev_reg.async_get(button.device_id).name == "AI Jukebox The Orchestral Arena"
+
+    with patch.object(AiJukeboxPlayer, "async_rebuild_pool", AsyncMock()) as rebuild:
+        await hass.services.async_call(
+            "button", "press", {"entity_id": button_id}, blocking=True)
+    rebuild.assert_awaited_once_with(force=True)
+
+    from homeassistant.exceptions import HomeAssistantError
+    with patch.object(AiJukeboxPlayer, "pool_build_running", True), \
+            patch.object(AiJukeboxPlayer, "async_rebuild_pool", AsyncMock()) as rebuild, \
+            pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            "button", "press", {"entity_id": button_id}, blocking=True)
+    rebuild.assert_not_awaited()
+
+    # A playlist added later gets one too, and loses it when removed.
+    hass.config_entries.async_add_subentry(entry, ConfigSubentry(
+        data={"name": "Night Piano", "prompt": "Quiet piano.", "batch_size": 10,
+              "refill_threshold": 2},
+        subentry_type="playlist", title="Night Piano", unique_id="night_piano"))
+    await hass.async_block_till_done()
+    assert hass.states.get("button.ai_jukebox_night_piano_rebuild_pool")
+    sub = next(s for s in entry.get_subentries_of_type("playlist")
+               if s.unique_id == "night_piano")
+    hass.config_entries.async_remove_subentry(entry, sub.subentry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("button.ai_jukebox_night_piano_rebuild_pool") is None
+    assert "night_piano" not in hass.data[DOMAIN]["buttons"]

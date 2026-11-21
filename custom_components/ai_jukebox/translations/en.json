@@ -112,5 +112,12 @@
         "reconfigure_successful": "Playlist saved."
       }
     }
+  },
+  "entity": {
+    "button": {
+      "rebuild_pool": {
+        "name": "Rebuild pool"
+      }
+    }
   }
 }

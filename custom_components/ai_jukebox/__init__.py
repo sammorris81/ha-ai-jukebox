@@ -40,6 +40,7 @@ from .const import (
     RESUME_STALLED_BUILD_MINUTES,
     SUBENTRY_PLAYLIST,
 )
+from .button import ensure_rebuild_button
 from .media_player import get_or_create_player, get_player, in_rebuild_window
 from .store import PlaylistStore
 
@@ -233,6 +234,7 @@ def _async_sync_players(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if known.get(subentry_id) == config:
             continue
         player = get_or_create_player(hass, entry, config, subentry_id)
+        ensure_rebuild_button(hass, config.get("name", ""), subentry_id)
         slug = PlaylistStore.playlist_slug(config.get("name", ""))
         if player is not None and slug in domain.setdefault("_build_on_save", set()):
             domain["_build_on_save"].discard(slug)
@@ -240,6 +242,7 @@ def _async_sync_players(hass: HomeAssistant, entry: ConfigEntry) -> None:
     for subentry_id in set(known) - set(current):
         slug = PlaylistStore.playlist_slug(known[subentry_id].get("name", ""))
         players.pop(slug, None)
+        domain.setdefault("buttons", {}).pop(slug, None)
     domain["_playlist_snapshot"] = current
 
 
