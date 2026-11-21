@@ -23,6 +23,7 @@ const STORE_KEY = "ai-jukebox-card";
 const ICONS = {
   play: "M8,5.14V19.14L19,12.14L8,5.14Z",
   stop: "M18,18H6V6H18V18Z",
+  build: "M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z",
   dice:
     "M19,5V19H5V5H19M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M7.5,6A1.5,1.5 0 0,0 6,7.5A1.5,1.5 0 0,0 7.5,9A1.5,1.5 0 0,0 9,7.5A1.5,1.5 0 0,0 7.5,6M16.5,15A1.5,1.5 0 0,0 15,16.5A1.5,1.5 0 0,0 16.5,18A1.5,1.5 0 0,0 18,16.5A1.5,1.5 0 0,0 16.5,15M16.5,6A1.5,1.5 0 0,0 15,7.5A1.5,1.5 0 0,0 16.5,9A1.5,1.5 0 0,0 18,7.5A1.5,1.5 0 0,0 16.5,6M7.5,15A1.5,1.5 0 0,0 6,16.5A1.5,1.5 0 0,0 7.5,18A1.5,1.5 0 0,0 9,16.5A1.5,1.5 0 0,0 7.5,15M12,10.5A1.5,1.5 0 0,0 10.5,12A1.5,1.5 0 0,0 12,13.5A1.5,1.5 0 0,0 13.5,12A1.5,1.5 0 0,0 12,10.5Z",
   music:
@@ -191,6 +192,13 @@ class AiJukeboxCard extends HTMLElement {
       this._start(this._selectedPlaylist(playlists), this._selectedSpeaker(speakers)));
   }
 
+  _onBuild() {
+    const playlist = this._selectedPlaylist(this._playlists());
+    if (!playlist) return;
+    this._run("Build", () =>
+      this._hass.callService("ai_jukebox", "rebuild_pool", { force: true }, { entity_id: playlist }));
+  }
+
   _onStop() {
     const playlist = this._selectedPlaylist(this._playlists());
     if (!playlist) return;
@@ -272,6 +280,15 @@ class AiJukeboxCard extends HTMLElement {
       : `<div class="hint">No playlists yet. Add one from the AI Jukebox integration page.</div>`;
 
     const canPlay = !this._pending && selected && speaker;
+    // A playlist with no tracks can't play, so the play button builds it
+    // instead, and waits while a build that has emptied the pool refills it.
+    // It turns back into play as soon as the first batch lands.
+    const needsPool = sel && !sel.attributes.pool_size;
+    const playButton = !needsPool
+      ? `<button id="play" class="primary" title="Play" aria-label="Play" ${canPlay ? "" : "disabled"}>${svg(ICONS.play)}</button>`
+      : sel.attributes.pool_building
+        ? `<button class="primary pill" title="Building the track pool" disabled>${svg(ICONS.build)}<span>Building…</span></button>`
+        : `<button id="build" class="primary pill" title="Build this playlist's track pool" ${this._pending ? "disabled" : ""}>${svg(ICONS.build)}<span>Build</span></button>`;
     const description = sel
       ? (sel.attributes.build_instructions || sel.attributes.prompt || "")
       : "";
@@ -279,7 +296,7 @@ class AiJukeboxCard extends HTMLElement {
     const poolNote = sel
       ? (sel.attributes.pool_building
         ? "Pool is building…"
-        : (sel.attributes.pool_size ? "" : "No track pool yet. It builds overnight, or tick \"Build the track pool now\" in the playlist's Configure form."))
+        : (sel.attributes.pool_size ? "" : "No track pool yet. Press Build to make one, which takes a few minutes. Play is available as soon as the first tracks are in."))
       : "";
 
     this.shadowRoot.innerHTML = `
@@ -289,7 +306,7 @@ class AiJukeboxCard extends HTMLElement {
         <div class="controls">
           <div class="pickers">${speakerControl}${playlistControl}</div>
           <div class="buttons">
-            <button id="play" class="primary" title="Play" aria-label="Play" ${canPlay ? "" : "disabled"}>${svg(ICONS.play)}</button>
+            ${playButton}
             <button id="stop" title="Stop" aria-label="Stop" ${!this._pending && sel && ["playing", "paused"].includes(sel.state) ? "" : "disabled"}>${svg(ICONS.stop)}</button>
             <button id="surprise" class="pill" title="Play a random playlist on the chosen speaker" ${canPlay && playlists.length > 1 ? "" : "disabled"}>${svg(ICONS.dice)}<span>Feeling lucky</span></button>
           </div>
@@ -321,6 +338,7 @@ class AiJukeboxCard extends HTMLElement {
     root.getElementById("play")?.addEventListener("click", () => this._onPlay());
     root.getElementById("stop")?.addEventListener("click", () => this._onStop());
     root.getElementById("surprise")?.addEventListener("click", () => this._onSurprise());
+    root.getElementById("build")?.addEventListener("click", () => this._onBuild());
   }
 
   _session(p) {

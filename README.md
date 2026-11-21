@@ -114,7 +114,9 @@ title: AI Jukebox   # optional; set to "" to hide
 ```
 
 Pick a speaker and a playlist, then play or stop, or press **Feeling lucky**
-to start a random one on the chosen speaker. The card shows the playlist's description and
+to start a random one on the chosen speaker. A playlist with no tracks yet
+shows **Build** in place of play; it turns into play as soon as the first
+tracks are in. The card shows the playlist's description and
 seed artists, and for each active session its status, what's playing, what's
 next, and why each track was picked. Any playlist with an error gets a banner.
 
