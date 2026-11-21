@@ -335,3 +335,36 @@ async def test_rebuild_button(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
     assert hass.states.get("button.ai_jukebox_night_piano_rebuild_pool") is None
     assert "night_piano" not in hass.data[DOMAIN]["buttons"]
+
+
+async def test_rebuild_leaves_session_activity_alone(hass: HomeAssistant) -> None:
+    """A rebuild under a playing session must not make it look busy.
+
+    It used to set activity to "refilling" for the whole build, which made
+    play/pause raise and swallowed the speaker's track changes.
+    """
+    from custom_components.ai_jukebox.const import ACTIVITY_PLAYING
+    from homeassistant.components.media_player import MediaPlayerState
+    await _setup_legacy(hass)
+    player = hass.data[DOMAIN]["players"]["the_orchestral_arena"]
+    player._state, player._activity = MediaPlayerState.PLAYING, ACTIVITY_PLAYING
+    seen = []
+
+    class FakeBuilder:
+        calls = 0
+
+        def __init__(self, *args):
+            pass
+
+        async def run(self, progress, resume):
+            seen.append(player._activity)
+            return {"tracks": 1, "albums": 1, "resolved": 1, "artists": 1,
+                    "batches": 1, "failed_batches": 0}
+
+    with patch("custom_components.ai_jukebox.build.pipeline.PoolBuilder", FakeBuilder), \
+            patch.object(player._store, "async_record_build_log", AsyncMock()):
+        await player.async_rebuild_pool(force=True)
+        await hass.async_block_till_done()
+    assert seen == [ACTIVITY_PLAYING]
+    assert player._activity == ACTIVITY_PLAYING
+    assert player._busy_reason is None

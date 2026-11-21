@@ -2504,11 +2504,11 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
     async def _rebuild_pool_once(self, resume: bool = False) -> None:
         from .build.pipeline import PoolBuilder
 
-        restore = self._activity in (ACTIVITY_IDLE, ACTIVITY_PLAYING, ACTIVITY_PAUSED)
-        if restore:
-            self._activity = ACTIVITY_REFILLING
-            self._touch()
-            self._safe_write_state()
+        # The build leaves `activity` alone. It used to set "refilling" for
+        # the whole build, and since that is one of _BUSY_ACTIVITIES a session
+        # playing through a rebuild refused play/pause and ignored its
+        # speaker's track changes -- so no refills -- for minutes. Progress
+        # shows through pool_building instead, which _on_progress refreshes.
         entities = self.hass.data[DOMAIN].get("build_ai_entities") or None
         builder = None
         build_log: list[str] = []
@@ -2529,7 +2529,7 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         try:
             # Constructed inside the try: it raises when no ai_task entity is
             # configured, and that must land on the entity like any other
-            # build failure rather than strand activity at `refilling`.
+            # build failure.
             builder = PoolBuilder(self.hass, self._store, self._playlist_name, entities)
             stats = await builder.run(progress=_on_progress, resume=resume)
             summary = (
@@ -2562,12 +2562,6 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
                 _LOGGER.exception("Could not record build log for '%s'",
                                   self._playlist_name)
             await self._refresh_pool_stats()
-            if restore and self._activity == ACTIVITY_REFILLING:
-                self._activity = (
-                    ACTIVITY_PLAYING if self._state == MediaPlayerState.PLAYING
-                    else ACTIVITY_PAUSED if self._state == MediaPlayerState.PAUSED
-                    else ACTIVITY_IDLE
-                )
             self._touch()
             self._safe_write_state()
 

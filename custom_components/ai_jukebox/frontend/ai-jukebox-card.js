@@ -200,9 +200,13 @@ class AiJukeboxCard extends HTMLElement {
 
   _onSurprise() {
     const playlists = this._playlists();
+    // Only playlists with tracks to play: a playlist with no pool yet, or
+    // one whose rebuild has just emptied it, would only fail to start.
+    const playable = playlists.filter((p) => p.attributes.pool_size);
     const current = this._selectedPlaylist(playlists);
-    const pool = playlists.filter((p) => p.entity_id !== current);
-    const pick = (pool.length ? pool : playlists)[Math.floor(Math.random() * (pool.length || playlists.length))];
+    const others = playable.filter((p) => p.entity_id !== current);
+    const choices = others.length ? others : playable;
+    const pick = choices[Math.floor(Math.random() * choices.length)];
     if (!pick) return;
     this._prefs.playlist = pick.entity_id;
     savePrefs(this._prefs);
@@ -337,7 +341,7 @@ class AiJukeboxCard extends HTMLElement {
         <div class="icon ${tone}">${svg(ICONS.music)}</div>
         <div class="body">
           <div class="name">${esc(playlistName(p))}</div>
-          <div class="meta">${esc(activity)} · ${esc(a.queue_length ?? 0)} queued · ${esc(speakers.join(", ") || "no speakers")}</div>
+          <div class="meta">${esc(activity)}${a.pool_building ? " · building pool" : ""} · ${esc(a.queue_length ?? 0)} queued · ${esc(speakers.join(", ") || "no speakers")}</div>
           ${track(np, "Now")}
           ${track(next, "Next")}
         </div>
@@ -767,8 +771,9 @@ class AiJukeboxPlayerCard extends HTMLElement {
     const dis = busy ? "disabled" : "";
     const pic = a.entity_picture;
     const activity = a.last_error ? "error" : a.activity;
-    const badge = ACTIVITY_LABEL[activity]
-      ? `<span class="badge ${activity === "error" ? "bad" : ""}">${esc(ACTIVITY_LABEL[activity])}</span>` : "";
+    const label = ACTIVITY_LABEL[activity] || (a.pool_building ? "Building pool" : "");
+    const badge = label
+      ? `<span class="badge ${activity === "error" ? "bad" : ""}">${esc(label)}</span>` : "";
     const pr = this._position(p);
     const vol = this._volume(p.entity_id, a.volume_level);
     const rows = this._speakerRows(p);
