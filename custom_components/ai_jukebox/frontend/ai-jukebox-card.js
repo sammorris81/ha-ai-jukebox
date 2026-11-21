@@ -359,7 +359,7 @@ class AiJukeboxCard extends HTMLElement {
         <div class="icon ${tone}">${svg(ICONS.music)}</div>
         <div class="body">
           <div class="name">${esc(playlistName(p))}</div>
-          <div class="meta">${esc(activity)}${a.pool_building ? " · building pool" : ""} · ${esc(a.queue_length ?? 0)} queued · ${esc(speakers.join(", ") || "no speakers")}</div>
+          <div class="meta">${esc(activity)} · ${esc(a.queue_length ?? 0)} queued · ${esc(speakers.join(", ") || "no speakers")}</div>
           ${track(np, "Now")}
           ${track(next, "Next")}
         </div>
@@ -789,9 +789,8 @@ class AiJukeboxPlayerCard extends HTMLElement {
     const dis = busy ? "disabled" : "";
     const pic = a.entity_picture;
     const activity = a.last_error ? "error" : a.activity;
-    const label = ACTIVITY_LABEL[activity] || (a.pool_building ? "Building pool" : "");
-    const badge = label
-      ? `<span class="badge ${activity === "error" ? "bad" : ""}">${esc(label)}</span>` : "";
+    const badge = ACTIVITY_LABEL[activity]
+      ? `<span class="badge ${activity === "error" ? "bad" : ""}">${esc(ACTIVITY_LABEL[activity])}</span>` : "";
     const pr = this._position(p);
     const vol = this._volume(p.entity_id, a.volume_level);
     const rows = this._speakerRows(p);

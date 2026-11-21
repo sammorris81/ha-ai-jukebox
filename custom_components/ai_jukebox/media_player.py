@@ -267,6 +267,23 @@ def get_or_create_player(
     return player
 
 
+def playlist_device_info(slug: str, name: str) -> DeviceInfo:
+    """The playlist's device, shared by its media player and its button.
+
+    Both platforms describe it in full: they set up concurrently, and the
+    device takes its name from whichever entity registers first. A bare
+    identifiers-only DeviceInfo from the button left the device unnamed when
+    the button won, which made its entity_id plain button.rebuild_pool.
+    """
+    return DeviceInfo(
+        identifiers={(DOMAIN, slug)},
+        name=f"AI Jukebox {name}",
+        manufacturer="AI Jukebox",
+        model="Playlist",
+        entry_type=DeviceEntryType.SERVICE,
+    )
+
+
 def get_player(hass: HomeAssistant, slug: str) -> "AiJukeboxPlayer | None":
     """Look up an existing playlist entity by slug (no create)."""
     return hass.data.get(DOMAIN, {}).get("players", {}).get(slug)
@@ -317,13 +334,7 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         # the slug, so the device is too. The device name is what the entity's
         # friendly_name becomes, and it keeps the "AI Jukebox " prefix that
         # friendly names have always had -- dashboards and scripts match on it.
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, slug)},
-            name=f"AI Jukebox {self._playlist_name}",
-            manufacturer="AI Jukebox",
-            model="Playlist",
-            entry_type=DeviceEntryType.SERVICE,
-        )
+        self._attr_device_info = playlist_device_info(slug, self._playlist_name)
 
         self._state = MediaPlayerState.IDLE
         self._activity = ACTIVITY_IDLE

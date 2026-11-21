@@ -303,7 +303,7 @@ async def test_rebuild_button(hass: HomeAssistant) -> None:
     entry = await _setup_legacy(hass)
     ent_reg, dev_reg = er.async_get(hass), dr.async_get(hass)
     button_id = "button.ai_jukebox_the_orchestral_arena_rebuild_pool"
-    assert hass.states.get(button_id)
+    assert hass.states.get(button_id), hass.states.async_entity_ids("button")
     button = ent_reg.async_get(button_id)
     player = ent_reg.async_get("media_player.ai_jukebox_the_orchestral_arena")
     assert button.device_id == player.device_id

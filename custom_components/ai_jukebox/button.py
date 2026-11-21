@@ -14,10 +14,10 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, SUBENTRY_PLAYLIST
+from .media_player import playlist_device_info
 from .store import PlaylistStore
 
 
@@ -41,7 +41,7 @@ def ensure_rebuild_button(hass: HomeAssistant, name: str, subentry_id: str) -> N
     add_entities = hass.data[DOMAIN].get("button_add_entities")
     if slug in buttons or add_entities is None:
         return
-    button = RebuildPoolButton(slug)
+    button = RebuildPoolButton(slug, name)
     buttons[slug] = button
     add_entities([button], config_subentry_id=subentry_id)
 
@@ -51,12 +51,11 @@ class RebuildPoolButton(ButtonEntity):
     _attr_translation_key = "rebuild_pool"
     _attr_icon = "mdi:playlist-refresh"
 
-    def __init__(self, slug: str) -> None:
+    def __init__(self, slug: str, name: str) -> None:
         self._slug = slug
         self._attr_unique_id = f"ai_jukebox_{slug}_rebuild_pool"
-        # Same identifiers as the player's DeviceInfo, so this lands on the
-        # playlist's existing device rather than making a second one.
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, slug)})
+        # Same device as the player's -- see playlist_device_info().
+        self._attr_device_info = playlist_device_info(slug, name)
 
     async def async_press(self) -> None:
         player = self.hass.data[DOMAIN].get("players", {}).get(self._slug)
