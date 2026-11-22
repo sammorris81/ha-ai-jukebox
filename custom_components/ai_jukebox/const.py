@@ -82,6 +82,21 @@ ALBUM_REPEAT_K: Final = 2
 # 10/90); 0.4 lands nearer 30/70, a nudge rather than a reversal.
 WEIGHT_ALPHA: Final = 0.4
 
+# The same SONG by a different artist (or a different recording) is a
+# separate uri, so none of the above notices it. On a standards-heavy pool --
+# the holidays playlist has 39 recordings of White Christmas -- that let one
+# song play five to seven times in an hour. Two rules, measured by simulation
+# against the real weights on that pool (2026-11-22, 150 simulated hours x3):
+#   * a refill never draws a song already in the queue or the same draw
+#     (draws are 15-20 tracks, about an hour, so play history alone cannot
+#     stop a song landing twice in one draw -- the weight below on its own
+#     left 6-17% of hours over three plays of one song);
+#   * each play of the song in the last TITLE_REPEAT_WINDOW_HOURS multiplies
+#     its weight by TITLE_REPEAT_FACTOR.
+# Together: worst rolling hour 2 plays of one song, 0% of hours over 3.
+TITLE_REPEAT_WINDOW_HOURS: Final = 1
+TITLE_REPEAT_FACTOR: Final = 0.3
+
 # Plays older than this are dropped when a pool is rebuilt. Equal to the
 # longest span sampling reads, so the file needs no background pruning.
 PLAYS_RETENTION_HOURS: Final = 12

@@ -206,13 +206,15 @@ from .const import (
     POOL_SAMPLE_WHILE_BUILDING,
     RECENCY_FLOOR_EXP,
     RECENCY_FULL_HOURS,
+    TITLE_REPEAT_FACTOR,
+    TITLE_REPEAT_WINDOW_HOURS,
     SEED_BOOST_CORRECTION,
     SEED_TARGET_SHARE,
     REPEAT_WINDOW_HOURS,
     WEIGHT_ALPHA,
 )
 from .store import PlaylistStore
-from .track_processing import track_dict_to_string
+from .track_processing import song_key, track_dict_to_string
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -2116,7 +2118,12 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         needed. One hard exclusion is not a weighting — a track already in the
         live queue or now playing is skipped outright, and if that leaves
         nothing scoreable this returns an empty list. Three effects are
-        multiplied: recency, repeat count, and a seed boost.
+        multiplied: recency, repeat count, and a seed boost -- plus a fourth,
+        the song: each play of the same song (any artist, any recording) in
+        the last TITLE_REPEAT_WINDOW_HOURS multiplies by TITLE_REPEAT_FACTOR.
+        A draw also takes each song at most once, and never one already
+        queued or playing, unless that would leave the draw short (a tiny
+        starter pool), in which case the skipped tracks fill the remainder.
 
         Recency decays from 1e-6 for a track just played to 1.0 at
         RECENCY_FULL_HOURS. Because it is monotonic in time since last play,
@@ -2149,6 +2156,10 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         plays = await self._store.async_get_plays(self._playlist_name)
         now = dt_util.utcnow()
         repeat_cutoff = now - timedelta(hours=REPEAT_WINDOW_HOURS)
+        title_cutoff = now - timedelta(hours=TITLE_REPEAT_WINDOW_HOURS)
+        # Plays carry no title, so the song is looked up from the pool by uri.
+        song_of = {t["uri"]: song_key(t.get("title")) for t in tracks}
+        song_plays: dict[str, int] = {}
         last_played: dict[str, object] = {}
         artist_plays: dict[str, int] = {}
         album_plays: dict[str, int] = {}
@@ -2159,6 +2170,8 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
             uri = entry.get("uri")
             if uri and (uri not in last_played or stamp > last_played[uri]):
                 last_played[uri] = stamp
+            if stamp >= title_cutoff and song_of.get(uri):
+                song_plays[song_of[uri]] = song_plays.get(song_of[uri], 0) + 1
             if stamp >= repeat_cutoff:
                 if entry.get("artist_id"):
                     artist_plays[entry["artist_id"]] = artist_plays.get(entry["artist_id"], 0) + 1
@@ -2167,6 +2180,8 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
 
         live = [self._now_playing] if self._now_playing else []
         queued = {t.get("uri") for t in live + list(self._queue) if t and t.get("uri")}
+        queued_songs = {song_key(t.get("title")) for t in live + list(self._queue) if t}
+        queued_songs.discard("")
 
         # Seed boost. Solved per pool rather than fixed, because seed share
         # varies from 6% to 35% across playlists and a flat multiplier would
@@ -2223,6 +2238,9 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
             weight = recency * (1.0 / (1 + repeat)) ** WEIGHT_ALPHA
             if seed_boost > 1.0 and _is_seed(track):
                 weight *= seed_boost
+            heard = song_plays.get(song_of.get(uri, ""), 0)
+            if heard:
+                weight *= TITLE_REPEAT_FACTOR ** heard
             # random() can return exactly 0.0, for which log is undefined.
             draw = random.random() or 1e-12
             scored.append((math.log(draw) / weight, track))
@@ -2230,7 +2248,21 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         if not scored:
             return []
         scored.sort(key=lambda kv: kv[0], reverse=True)
-        picked = [dict(t, source="pool") for _, t in scored[:count]]
+        chosen: list[dict] = []
+        skipped: list[dict] = []
+        songs = set(queued_songs)
+        for _, t in scored:
+            if len(chosen) >= count:
+                break
+            song = song_of.get(t["uri"], "")
+            if song and song in songs:
+                skipped.append(t)
+                continue
+            if song:
+                songs.add(song)
+            chosen.append(t)
+        chosen += skipped[:count - len(chosen)]
+        picked = [dict(t, source="pool") for t in chosen]
         _LOGGER.debug(
             "'%s': drew %d of %d pool tracks (%d eligible, building=%s)",
             self._playlist_name, len(picked), len(tracks), len(scored),

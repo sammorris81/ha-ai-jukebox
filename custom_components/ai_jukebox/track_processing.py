@@ -48,6 +48,39 @@ def normalize_track(track: str | None) -> str:
     return normalized.strip()
 
 
+_TRAILING_GROUP = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]\s*$")
+_TRAILING_VERSION = re.compile(
+    r"\s+-\s+[^-]*\b(?:remaster(?:ed)?|version|mono|stereo|single|edit|"
+    r"recording|mix|from)\b[^-]*$",
+    re.IGNORECASE,
+)
+
+
+def song_key(title: str | None) -> str:
+    """The song a title names, independent of who recorded it or where.
+
+    'White Christmas [From "Holiday Inn" Soundtrack]', 'White Christmas -
+    Remastered 2004' and 'White Christmas' are one song; so are 'Santa Claus
+    Is Comin' to Town' and '...Coming to Town'. Used to keep one recording
+    per song per artist in a pool (store.extend_pool) and to stop the same
+    song being drawn twice into one refill (media_player._sample_from_pool).
+    Every trailing (...)/[...] group is stripped, not just one: these are
+    edition notes, never part of a song's name. Dropped-g spellings are
+    folded by turning every word ending "in" into "ing" on both sides, which
+    is only ever compared against itself, so 'begin' -> 'beging' is harmless.
+    """
+    t = title or ""
+    for _ in range(3):
+        stripped = _TRAILING_GROUP.sub("", t)
+        if stripped == t or not stripped.strip():
+            break
+        t = stripped
+    t = _TRAILING_VERSION.sub("", t) or t
+    t = normalize_track(t)
+    t = re.sub(r"\b(\w+)in\b", r"\1ing", t)
+    return re.sub(r"[^a-z0-9]", "", t)
+
+
 def strip_album(track: str) -> tuple[str, str]:
     """Split a 'Artist - Title | Album' string into (track, album)."""
     if not track:

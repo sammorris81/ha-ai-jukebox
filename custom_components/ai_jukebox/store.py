@@ -49,7 +49,7 @@ from .const import (
     STORAGE_VERSION,
     SUBENTRY_PLAYLIST,
 )
-from .track_processing import normalize_track
+from .track_processing import normalize_track, song_key
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry, ConfigSubentry
@@ -433,20 +433,31 @@ class PlaylistStore:
     def extend_pool(self, playlist_name: str, tracks: list[dict]) -> int:
         """Append one batch. Returns how many were new.
 
-        Deduped on uri: the builder already collapses the same song appearing
-        on two of an artist's albums, so anything arriving twice here is a
-        genuine duplicate id.
+        Deduped on uri, and on (artist, song): one recording of each song per
+        artist. The builder only collapses repeats within one album listing,
+        and artists with many Christmas albums, reissues and compilations
+        brought the same song in two to four times (81 of 608 tracks on the
+        2026-11-21 holidays build -- the Beach Boys' Little Saint Nick from
+        three albums). Within a batch the model's best-ranked pick of a song
+        is the one kept; across batches the first to land wins, which is
+        rarely tested since an artist sits in exactly one batch.
         """
         if not tracks:
             return 0
         data = self._load_pool_data(playlist_name)
         have = {t.get("uri") for t in data["tracks"]}
+        songs = {self._artist_song(t) for t in data["tracks"]}
         added = 0
-        for t in tracks:
+        # sorted() is stable, so equal ranks keep the model's album order.
+        for t in sorted(tracks, key=lambda t: t.get("rank") or 999):
             uri = t.get("uri")
             if not uri or uri in have:
                 continue
+            key = self._artist_song(t)
+            if key[1] and key in songs:
+                continue
             have.add(uri)
+            songs.add(key)
             data["tracks"].append(t)
             added += 1
         self._save_pool_data(playlist_name, data)
@@ -625,6 +636,11 @@ class PlaylistStore:
             await self._hass.async_add_executor_job(
                 self.clear_plays, playlist_name
             )
+
+    @staticmethod
+    def _artist_song(track: dict) -> tuple[str, str]:
+        artist = str(track.get("artist_id") or (track.get("artist") or "").lower())
+        return artist, song_key(track.get("title"))
 
     @staticmethod
     def playlist_slug(name: str) -> str:
