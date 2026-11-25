@@ -1726,6 +1726,20 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         right after one. A mix of stopped and playing survivors needs no
         grace — the playing ones prove the group is alive, so the stopped
         ones really are leaving.
+
+        Except while the playing leader still lists them in its group: a
+        member's own state trails its leader's after MA regroups it, so for
+        a moment the leader plays and the members read idle. Treating that
+        as a departure ended a session on 2026-11-25. The laundry room Sonos
+        (the leader) dropped off wifi at 21:34:48 UTC and MA handed the group
+        to main_bedroom. main_bedroom was playing at 21:34:57.097 with
+        main_floor and main_bathroom already in its group_members, while
+        both still read idle. This loop unjoined them at .305, and
+        main_bathroom turned to playing at .348, 43ms later. So a stopped
+        member the playing leader still groups gets the same grace as the
+        all-stopped case, and is detached only if it is still stopped at the
+        deadline. Stopped speakers outside the leader's group are detached
+        straight away, as before.
         """
         deadline = self.hass.loop.time() + DETACH_TRANSFER_TIMEOUT
         while self._speakers:
@@ -1737,6 +1751,13 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
             ]
             if not stopped:
                 return
+            leader, members, _ = self._partition_speakers(self._speakers)
+            if leader and leader not in stopped and self.hass.loop.time() < deadline:
+                regrouping = set(members) & set(self._live_group_members(leader))
+                stopped = [s for s in stopped if s not in regrouping]
+                if not stopped:
+                    await asyncio.sleep(DETACH_POLL_INTERVAL)
+                    continue
             if len(stopped) < len(self._speakers) or self.hass.loop.time() >= deadline:
                 # Terminates: each round drops at least one speaker, and the
                 # last one out ends the session.
