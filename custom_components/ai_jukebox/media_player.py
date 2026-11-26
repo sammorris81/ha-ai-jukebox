@@ -206,7 +206,6 @@ from .const import (
     POOL_SAMPLE_WHILE_BUILDING,
     RECENCY_FLOOR_EXP,
     RECENCY_FULL_HOURS,
-    TITLE_REPEAT_FACTOR,
     TITLE_REPEAT_WINDOW_HOURS,
     SEED_BOOST_CORRECTION,
     SEED_TARGET_SHARE,
@@ -871,7 +870,11 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
             # sampling's recency weighting accounts for it. Marked
             # `untracked`: content this playlist never queued (a hijack, or an
             # external group-join).
-            if previous:
+            # Only an untracked previous: a matched track was recorded when
+            # it started, and recording it again here doubled it in the plays
+            # log (seen 2026-11-25). An untracked one carries no uri, so the
+            # store skips it and only the count moves.
+            if previous and previous.get("source") == "untracked":
                 await self._store.async_record_play(
                     self._playlist_name, previous, dt_util.utcnow().isoformat()
                 )
@@ -2139,12 +2142,12 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         needed. One hard exclusion is not a weighting — a track already in the
         live queue or now playing is skipped outright, and if that leaves
         nothing scoreable this returns an empty list. Three effects are
-        multiplied: recency, repeat count, and a seed boost -- plus a fourth,
-        the song: each play of the same song (any artist, any recording) in
-        the last TITLE_REPEAT_WINDOW_HOURS multiplies by TITLE_REPEAT_FACTOR.
-        A draw also takes each song at most once, and never one already
-        queued or playing, unless that would leave the draw short (a tiny
-        starter pool), in which case the skipped tracks fill the remainder.
+        multiplied: recency, repeat count, and a seed boost. A draw also takes
+        each song (any artist, any recording) at most once, and never one
+        already queued, playing, or played in the last
+        TITLE_REPEAT_WINDOW_HOURS, unless that would leave the draw short (a
+        tiny starter pool, or a pool of few songs), in which case the skipped
+        tracks fill the remainder.
 
         Recency decays from 1e-6 for a track just played to 1.0 at
         RECENCY_FULL_HOURS. Because it is monotonic in time since last play,
@@ -2180,7 +2183,7 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         title_cutoff = now - timedelta(hours=TITLE_REPEAT_WINDOW_HOURS)
         # Plays carry no title, so the song is looked up from the pool by uri.
         song_of = {t["uri"]: song_key(t.get("title")) for t in tracks}
-        song_plays: dict[str, int] = {}
+        recent_songs: set[str] = set()
         last_played: dict[str, object] = {}
         artist_plays: dict[str, int] = {}
         album_plays: dict[str, int] = {}
@@ -2192,7 +2195,7 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
             if uri and (uri not in last_played or stamp > last_played[uri]):
                 last_played[uri] = stamp
             if stamp >= title_cutoff and song_of.get(uri):
-                song_plays[song_of[uri]] = song_plays.get(song_of[uri], 0) + 1
+                recent_songs.add(song_of[uri])
             if stamp >= repeat_cutoff:
                 if entry.get("artist_id"):
                     artist_plays[entry["artist_id"]] = artist_plays.get(entry["artist_id"], 0) + 1
@@ -2259,9 +2262,6 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
             weight = recency * (1.0 / (1 + repeat)) ** WEIGHT_ALPHA
             if seed_boost > 1.0 and _is_seed(track):
                 weight *= seed_boost
-            heard = song_plays.get(song_of.get(uri, ""), 0)
-            if heard:
-                weight *= TITLE_REPEAT_FACTOR ** heard
             # random() can return exactly 0.0, for which log is undefined.
             draw = random.random() or 1e-12
             scored.append((math.log(draw) / weight, track))
@@ -2271,7 +2271,7 @@ class AiJukeboxPlayer(MediaPlayerEntity, RestoreEntity):
         scored.sort(key=lambda kv: kv[0], reverse=True)
         chosen: list[dict] = []
         skipped: list[dict] = []
-        songs = set(queued_songs)
+        songs = queued_songs | recent_songs
         for _, t in scored:
             if len(chosen) >= count:
                 break

@@ -387,7 +387,8 @@ generates, resolves or writes tracks.
 
 **Sampling** is weight-based. Every track in the pool is always a candidate,
 just at wildly different odds. The one hard rule is per draw: a refill takes
-each *song* at most once and never one already queued or playing (see "Why the
+each *song* at most once and never one already queued, playing, or played in the
+last four hours (see "Why the
 song counts" below), falling back to the skipped tracks only if that would
 leave the draw short.
 
@@ -396,9 +397,8 @@ recency = 10 ** (-6 * (1 - min(dt, T) / T))     dt = time since this track
                                                  last played, T = 12 hours
 repeat  = plays_artist + k * plays_album         (plays within the last 8 hours)
 seed    = B if this track's artist is a seed, else 1
-song    = 0.3 ** (plays of this song, any artist, in the last hour)
 
-weight  = recency * (1 / (1 + repeat)) ** alpha * seed * song   (alpha 0.4)
+weight  = recency * (1 / (1 + repeat)) ** alpha * seed          (alpha 0.4)
 ```
 
 The recency term runs from 1e-6 for a track just played to 1.0 at twelve hours:
@@ -420,7 +420,17 @@ tracks, about an hour of music, in one go, so two copies can land in the same
 draw before either has played. Simulated on that pool with the real weights
 (150 hours x3): weight only, 6-17% of hours had a song more than three times;
 distinct songs per draw, 0% and a worst rolling hour of 3; both together, a
-worst rolling hour of 2. `track_processing.song_key()` decides what counts as
+worst rolling hour of 2.
+
+**Four-hour song window (2026-11-25).** That weight was 0.3 per play of the
+song in the last hour, and it held the worst hour to 2 while still letting the
+standards come straight back: in one 12-hour day on the holidays pool six songs
+played 7-8 times each, typically 1.5-2 hours apart. 30-40 recordings of one
+song outweigh any per-recording penalty; re-simulated over four hours, even
+0.02 per play left repeats 13 minutes apart. The weight was replaced by the
+draw rule above extended to songs played in the last four hours (5x120
+simulated hours: top songs 2.6 plays per 12 hours, never under four hours
+apart, worst rolling hour 1). `track_processing.song_key()` decides what counts as
 the same song: edition notes in brackets, "- Remastered" tails and dropped-g
 spellings ("Comin'") are folded.
 

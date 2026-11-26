@@ -91,11 +91,17 @@ WEIGHT_ALPHA: Final = 0.4
 #     (draws are 15-20 tracks, about an hour, so play history alone cannot
 #     stop a song landing twice in one draw -- the weight below on its own
 #     left 6-17% of hours over three plays of one song);
-#   * each play of the song in the last TITLE_REPEAT_WINDOW_HOURS multiplies
-#     its weight by TITLE_REPEAT_FACTOR.
-# Together: worst rolling hour 2 plays of one song, 0% of hours over 3.
-TITLE_REPEAT_WINDOW_HOURS: Final = 1
-TITLE_REPEAT_FACTOR: Final = 0.3
+#   * a song played in the last TITLE_REPEAT_WINDOW_HOURS is treated the
+#     same way -- skipped, filled back in only if the draw would be short.
+# The second rule was first a weight (x0.3 per play within one hour). That held
+# the worst rolling hour to 2 but let the standards come straight back: on
+# 2026-11-25 six songs played 7-8 times each in 12 hours, typically 1.5-2 hours
+# apart, because 30-40 recordings of one song outweigh any per-recording
+# penalty (re-simulated: even x0.02 over four hours left repeats 13 minutes
+# apart). Excluding the song outright over four hours, 5x120 simulated hours:
+# top songs 2.6 plays per 12 hours, never under 4 hours apart, worst rolling
+# hour 1 (was 7.7 plays, under 10 minutes minimum).
+TITLE_REPEAT_WINDOW_HOURS: Final = 4
 
 # Plays older than this are dropped when a pool is rebuilt. Equal to the
 # longest span sampling reads, so the file needs no background pruning.
