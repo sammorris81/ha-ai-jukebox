@@ -224,6 +224,11 @@ def test_rebuild_window() -> None:
 async def test_scheduler_picks_stalest(hass: HomeAssistant, freezer) -> None:
     from datetime import datetime
     from homeassistant.util import dt as dt_util
+    # Arm the scheduler at a fixed time before the window. Set up at the real
+    # clock instead, its first hourly tick lands after today's date, so moving
+    # the frozen clock back to 2026-11-17 below never reaches it -- the test
+    # passed only while the real date was still before 2026-11-17.
+    freezer.move_to(datetime(2026, 11, 16, 12, 0, 0, tzinfo=dt_util.get_default_time_zone()))
     entry = await _setup_legacy(hass)
     players = hass.data[DOMAIN]["players"]
     players["the_orchestral_arena"]._pool_stats = {"built_at": "2026-11-01T00:00:00"}
